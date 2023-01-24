@@ -204,9 +204,13 @@ missing_tallies %>%
 ```
 
 ```{r}
+
+
 missing_tallies <- ratios %>%
   group_by(Replicate, missing) %>%
   tally()
+
+missing_tallies$Replicate <- factor(missing_tallies$Replicate, levels=c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16"))
 
 missing_tallies %>%
   ggplot(aes(x = Replicate, y = n, fill = missing)) +
@@ -328,6 +332,8 @@ matched_tallies <- ratios_matched %>%
   group_by(Replicate, matched) %>% 
   tally()
 
+matched_tallies$Replicate <- factor(matched_tallies$Replicate, levels=c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16"))
+
 # Plot as stacked bar plot
 matched_tallies %>% 
   ggplot(aes(x = Replicate, y = n, fill = matched)) +
@@ -339,6 +345,9 @@ matched_tallies %>%
 ```
 
 ```{r}
+
+ratios_matched$Replicate <- factor(ratios_matched$Replicate, levels=c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16"))
+
 ratios_matched %>%
   ggplot(aes(x = CL, y = NC)) +
   geom_point(size = 0.5, alpha=0.5) +
@@ -347,6 +356,8 @@ ratios_matched %>%
   facet_grid(Replicate~ matched) +
   xlab('CL (log2)') +
   ylab('NC (log2)')
+
+
 
 ```
 
