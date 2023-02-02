@@ -3,33 +3,9 @@ title: "R Notebook"
 output: html_notebook
 ---
 
-This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+ADD EXPLANATION WAS THE NOTEBOOK IS FOR. E.G AIMS, STEPS, ETC
 
-Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
-
-```{r}
-remotes::install_github("MRCToxBioinformatics/Proteomics_data_analysis", dependencies='Suggests')
-
-remotes::install_github("MRCToxBioinformatics/Proteomics.analysis.data")
-
-if (!require("BiocManager", quietly = TRUE))
-    install.packages("BiocManager")
-BiocManager::install(version = "3.16")
-
-BiocManager::install("preprocessCore")
-
-
-install.packages("remotes")
-
-remotes::install_github("CambridgeCentreForProteomics/camprotR", dependencies = TRUE)
-
-remotes::install_github("CambridgeCentreForProteomics/camprotR")
-#remove.packages("camprotR")
-
-BiocManager::install("MSnbase")
-
-install.packages("here")
-
+```{r, message=FALSE}
 library(preprocessCore)
 library(camprotR)
 library(Biostrings)
@@ -50,39 +26,21 @@ library(here)
 replicates <- 1:16
 #here() is used above to make the filepath start from the correct location (the top of the project directory)
 #Sys.glob returns all the files matching the above pattern, which should be all peptide groups files
-pep_infiles <- Sys.glob(here('inst/extdata/*_PeptideGroups.txt'))
-psm_infiles <- Sys.glob(here('inst/extdata/*_PSMs.txt'))
+pep_infiles <- Sys.glob(here('extdata/*_PeptideGroups.txt'))
 
 #this gives us a list of all the files (16 replicates)
-
 
 names(pep_infiles) <- replicates
 
 print(pep_infiles)
 
 
-#now we test that we can open the first file
-test_file <- read.delim(pep_infiles[[1]])
-test_file_psm <- read.delim(psm_infiles[[1]])
-
-
-
-
-#looks okay
-
-
 ```
 
-```{r}
-infdata <- read.delim(pep_infiles[[1]])
-
-print(colnames(infdata))
-
-```
 
 ```{r}
 crap_fasta_inf <- here(
-  'inst/extdata/crap.fasta')
+  'extdata/crap.fasta')
 
 # Load the cRAP FASTA used for the PD search. For your experiment,
 # make sure you're using the same file as used in the PD workflow
@@ -111,10 +69,13 @@ pep_data_parsed <- lapply(
                    unique_master = FALSE)
   }
 )
-
 ```
 
-#lapply basically does the function below in the for loop but in a more concise way, this is what Tom showed me.
+
+
+In the above code chunk, lapply basically does the same as the for loop below, but in a more concise way. `eval=FALSE` ensures the code chunk does not run by default.
+```{r, eval=FALSE}
+#
 
 pep_data_parsed <- NULL
 
@@ -129,7 +90,7 @@ for(infile in pep_infiles){ # define the function to run
                    unique_master = FALSE)
 }
 
-
+```
 
 
 ```{r}
@@ -210,7 +171,7 @@ missing_tallies <- ratios %>%
   group_by(Replicate, missing) %>%
   tally()
 
-missing_tallies$Replicate <- factor(missing_tallies$Replicate, levels=c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16"))
+missing_tallies$Replicate <- factor(missing_tallies$Replicate, levels=replicates)
 
 missing_tallies %>%
   ggplot(aes(x = Replicate, y = n, fill = missing)) +
@@ -220,13 +181,13 @@ missing_tallies %>%
 ```
 
 ```{r}
-psm_infiles <- Sys.glob(here('inst/extdata/*_PSMs.txt'))
+psm_infiles <- Sys.glob(here('extdata/*_PSMs.txt'))
 
 names(psm_infiles) <- replicates
 
 ```
 
-```{r, eval=FALSE}
+```{r, message=FALSE}
 psm_matched_data <- lapply(
   psm_infiles, function(infile) {
     # Read in the PSM file
@@ -242,31 +203,11 @@ psm_matched_data <- lapply(
   }
  
 )
-#saveRDS(psm_matched_data,"inst/extdata"))
-```
 
-```{r}
-#psm_matched_data <- readRDS('inst/extdata')
 ```
 
 
-
-
 ```{r}
-
-#profvis({x <- camprotR::silac_psm_seq_int(read.delim('~/Documents/ASOs/R/infSILAC/OOPS-infSILAC-HepG2/inst/extdata/3390720135_AF_OOPS-SILAC_01-(1)_PSMs.txt'))})
-
-
-#x
-#dim(psm_matched_data)
-#table(x$Modifications)
-
-#install.packages('profvis')
-#library(profvis)
-```
-
-```{r}
-
 
 all_psm_matched_data <- psm_matched_data %>%
   names() %>%
@@ -295,9 +236,9 @@ ratios_matched <- ratios %>%
   
   # Add new columns with CL/NC matched information using the
   # matched_Heavy and matched_Light columns and the label swap information
-  # (rep1/2, CL=H; rep3/4 CL=L)
-  mutate('Matched_CL' = ifelse(Replicate %in% 1:2, matched_Heavy, matched_Light),
-         'Matched_NC' = ifelse(Replicate %in% 1:2, matched_Light, matched_Heavy)) %>%
+  # (rep1-8, CL=L; rep9-16 CL=H)
+  mutate('Matched_CL' = ifelse(Replicate %in% 9:16, matched_Heavy, matched_Light),
+         'Matched_NC' = ifelse(Replicate %in% 9:16, matched_Light, matched_Heavy)) %>%
   
   # And subset to these columns
   select(Master.Protein.Accessions,
@@ -325,6 +266,9 @@ ratios_matched <- ratios_matched %>%
   )
 ```
 
+
+
+
 ```{r}
 # Tally the peptide match status
 matched_tallies <- ratios_matched %>%
@@ -332,7 +276,7 @@ matched_tallies <- ratios_matched %>%
   group_by(Replicate, matched) %>% 
   tally()
 
-matched_tallies$Replicate <- factor(matched_tallies$Replicate, levels=c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16"))
+matched_tallies$Replicate <- factor(matched_tallies$Replicate, levels=replicates)
 
 # Plot as stacked bar plot
 matched_tallies %>% 
@@ -344,16 +288,30 @@ matched_tallies %>%
   ylab('Fraction of peptides')
 ```
 
+
 ```{r}
 
-ratios_matched$Replicate <- factor(ratios_matched$Replicate, levels=c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16"))
+ratios_matched$Replicate <- factor(ratios_matched$Replicate, levels=replicates)
+
+for(rep in replicates){
+  p <- ratios_matched %>%
+    filter(Replicate==rep) %>%
+    ggplot(aes(x = CL, y = NC)) +
+    geom_point(size = 0.5, alpha=0.5) +
+    geom_abline(slope = 1, linetype = 2, colour = 'grey50') + # line at CL==NC
+    theme_camprot(base_size = 15, border = FALSE) +
+    facet_grid(~matched) +
+    xlab('CL (log2)') +
+    ylab('NC (log2)')
+  print(p)
+}
 
 ratios_matched %>%
   ggplot(aes(x = CL, y = NC)) +
-  geom_point(size = 0.5, alpha=0.5) +
+  geom_point(size = 0.2, alpha=0.2) +
   geom_abline(slope = 1, linetype = 2, colour = 'grey50') + # line at CL==NC
   theme_camprot(base_size = 15, border = FALSE) +
-  facet_grid(Replicate~ matched) +
+  facet_grid(~matched) +
   xlab('CL (log2)') +
   ylab('NC (log2)')
 
@@ -370,13 +328,13 @@ cl_nc_correlations <- ratios_matched %>%
 #> `.groups` argument.
 
 cl_nc_correlations %>%
-  ggplot(aes(matched, cor, colour=Replicate)) +
+  ggplot(aes(matched, cor, colour=ifelse(Replicate %in% 1:8, '1:8', '9:16'))) +
   geom_point() +
   theme_camprot(border = FALSE, base_size=15) +
   theme(axis.text.x=element_text(angle=45, vjust=1, hjust=1)) +
   xlab('') +
-  ylab('Pearson correlation') 
-  #scale_colour_manual(values=get_cat_palette(12))
+  ylab('Pearson correlation')  +
+  scale_colour_manual(values=get_cat_palette(2), name='Replicate')
 ```
 
 
@@ -386,11 +344,7 @@ cl_nc_correlations %>%
 # Create a unified peptide sequence to protein assignment
 new_seq_to_master <- pep_infiles %>%
   camprotR::get_parsimony_pep2prot()
-#> With original assignments, 1951 master proteins. With update, 1820 master proteins
-#> Storing counts in `nn`, as `n` already present in input
-#> Storing counts in `nn`, as `n` already present in input
-#> Comparing Master Protein IDs
-#> ℹ Use `name = "new_name"` to pick a new name.
+
 ```
 
 
@@ -407,25 +361,28 @@ flt_ratios <- ratios_matched %>%
 ```{r}
 # Create a wide table with unique ids as row names
 flt_ratios_wide <- flt_ratios %>% 
+  filter(matched=='Both spectrum matched') %>%
   select(Master.Protein.Accessions,
          Sequence, Modifications,
-         Replicate, Matched_NC, ratio) %>% 
-  pivot_wider(names_from = "Replicate", values_from = c("Matched_NC", "ratio")) %>% 
+         Replicate, ratio) %>% 
+  pivot_wider(names_from = "Replicate", values_from = "ratio") %>% 
   # Create an id column from the sequence and modification columns
   unite(id, Sequence, Modifications, remove = FALSE) %>%
   column_to_rownames(var = "id")
 
 # Create expression matrix (exprs)
 exprs_data <- flt_ratios_wide %>% 
-  select(matches("ratio_[1-9]")) %>% # select unique ids and ratio data
+  select(matches("[1-9]")) %>% # select unique ids and ratio data
   as.matrix()
+
 ```
 
 ```{r}
 # Create feature metadata data frame (fData)
 feat_data <- flt_ratios_wide %>% 
-  select(!matches("ratio")) # select unique ids and everything but ratio data
+  select(!matches("[1-9]")) # select unique ids and everything but ratio data
 ```
+
 
 ```{r}
 # Create MSnSet
@@ -436,38 +393,21 @@ print(pData(pep_res))
 #> data frame with 0 columns and 4 rows
 ```
 
+
 ```{r}
 # Add replicate number to phenotype data
-pData(pep_res)$Replicate <- 1:ncol(exprs_data)
+pData(pep_res)$Replicate <- as.numeric(colnames(exprs_data))
 ```
 
 
-```{r}
-print(pep_res)
-#> MSnSet (storageMode: lockedEnvironment)
-#> assayData: 3839 features, 4 samples 
-#>   element names: exprs 
-#> protocolData: none
-#> phenoData
-#>   sampleNames: ratio_1 ratio_2 ratio_4 ratio_3
-#>   varLabels: Replicate
-#>   varMetadata: labelDescription
-#> featureData
-#>   featureNames: AAAAAAAAAAAAAAAGAGAGAK_ AAAAAAAAAAGAAGGR_1xAcetyl
-#>     [N-Term] ... YYVTIIDAPGHR_ (3839 total)
-#>   fvarLabels: Master.Protein.Accessions Sequence ... Matched_NC_3 (7
-#>     total)
-#>   fvarMetadata: labelDescription
-#> experimentData: use 'experimentData(object)'
-#> Annotation:  
-#> - - - Processing information - - -
-#>  MSnbase version: 2.20.4
-```
 
 ```{r}
+pep_res_flt <- pep_res %>%
+  camprotR::restrict_features_per_protein(min_features=2, plot=FALSE)
+
 prot_res <- combineFeatures(
-  pep_res, 
-  groupBy = fData(pep_res)$Master.Protein.Accessions,
+  pep_res_flt,
+  groupBy = fData(pep_res_flt)$Master.Protein.Accessions,
   method = "median",
   na.rm = TRUE
 ) 
@@ -476,27 +416,15 @@ prot_res <- combineFeatures(
 #> values on data aggregation.
 
 print(nrow(pep_res))
-
+print(nrow(pep_res_flt))
 print(nrow((prot_res)))
 
 ```
 
-
 ```{r}
-prot_matched_nc <- fData(pep_res) %>%
-  select(-Sequence, -Modifications) %>% 
-  pivot_longer(cols = -Master.Protein.Accessions, values_to = 'Matched_NC') %>%
-  group_by(Master.Protein.Accessions) %>%
-  filter(!is.na(Matched_NC)) %>% 
-  summarise(any_not_sequenced = any(!Matched_NC))
-
-
-fData(prot_res) <- fData(prot_res) %>%
-  rownames_to_column(var = "id") %>% 
-  left_join(prot_matched_nc, by = "Master.Protein.Accessions") %>% 
-  column_to_rownames(var = "id")
+plot_quant(pep_res_flt[,order(pData(pep_res_flt)$Replicate)])
+plot_quant(prot_res[,order(pData(prot_res)$Replicate)])
 ```
-
 
 
 ```{r}
@@ -504,27 +432,8 @@ MSnbase::plotNA(prot_res, pNA = 0)
 ```
 
 ```{r}
-saveRDS(prot_res, 'data/prot_res.rds')
-saveRDS(pep_res, 'data/pep_res.rds')
+saveRDS(prot_res, 'results/prot_res.rds')
+saveRDS(pep_res, 'results/pep_res.rds')
 ```
 
-
-pep_data_parsed <- lapply(
-  pep_infiles, function(infile) { # define the function to run
-    
-    infdata <- read.delim(infile)
-    
-    parse_features(infdata,
-                   silac = TRUE,
-                   level = 'peptide',
-                   crap_proteins = crap_accessions,
-                   unique_master = FALSE)
-  }
-)
-
-Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
-
-When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
-
-The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
 
