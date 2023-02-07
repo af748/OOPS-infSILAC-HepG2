@@ -107,10 +107,9 @@ annotate_parsed_data <- function(rep_n){
   
   # Label-swap info defines whether heavy or light is CL
   #here I will treat my samples as ncl vs cl even though they contain both cl and ncl samples.
-  #in my samples 1:8 samples have NC as heavy, and therefore CL can be treated as light.
-  # samples 9:16 have NC as light, therefore we treat CL as heavy
-  cl_col <- ifelse(rep_n %in% 9:16, abundance_heavy_col, abundance_light_col) 
-  nc_col <- ifelse(rep_n %in% 9:16, abundance_light_col, abundance_heavy_col)
+  #in my samples 2,4,6,8,10,12,14,16 samples have NC as heavy, and therefore CL can be treated as light and vis versa
+  cl_col <- ifelse(rep_n %in% seq(1,16,2), abundance_heavy_col, abundance_light_col) 
+  nc_col <- ifelse(rep_n %in% seq(1,16,2), abundance_light_col, abundance_heavy_col)
   
   pep_data <- pep_data %>%
     # Add new columns with CL or NC intensities 
@@ -235,10 +234,9 @@ ratios_matched <- ratios %>%
         by = c('Sequence', 'Modifications', 'Replicate'))  %>%
   
   # Add new columns with CL/NC matched information using the
-  # matched_Heavy and matched_Light columns and the label swap information
-  # (rep1-8, CL=L; rep9-16 CL=H)
-  mutate('Matched_CL' = ifelse(Replicate %in% 9:16, matched_Heavy, matched_Light),
-         'Matched_NC' = ifelse(Replicate %in% 9:16, matched_Light, matched_Heavy)) %>%
+  #in my samples 2,4,6,8,10,12,14,16 samples have NC as heavy, and therefore CL can be treated as light and vis versa
+  mutate('Matched_CL' = ifelse(Replicate %in% seq(1,16,2), matched_Heavy, matched_Light),
+         'Matched_NC' = ifelse(Replicate %in% seq(1,16,2), matched_Light, matched_Heavy)) %>%
   
   # And subset to these columns
   select(Master.Protein.Accessions,
@@ -328,7 +326,7 @@ cl_nc_correlations <- ratios_matched %>%
 #> `.groups` argument.
 
 cl_nc_correlations %>%
-  ggplot(aes(matched, cor, colour=ifelse(Replicate %in% 1:8, '1:8', '9:16'))) +
+  ggplot(aes(matched, cor, colour=ifelse(Replicate %in% seq(1,16,2), 'CL=H', 'CL=L'))) +
   geom_point() +
   theme_camprot(border = FALSE, base_size=15) +
   theme(axis.text.x=element_text(angle=45, vjust=1, hjust=1)) +
@@ -397,6 +395,7 @@ print(pData(pep_res))
 ```{r}
 # Add replicate number to phenotype data
 pData(pep_res)$Replicate <- as.numeric(colnames(exprs_data))
+pData(pep_res)$label_swap <- ifelse(pData(pep_res)$Replicate %in% seq(1,16,2), 'CL=H', 'CL=L')
 ```
 
 
@@ -422,13 +421,14 @@ print(nrow((prot_res)))
 ```
 
 ```{r}
-plot_quant(pep_res_flt[,order(pData(pep_res_flt)$Replicate)])
-plot_quant(prot_res[,order(pData(prot_res)$Replicate)])
+plot_quant(pep_res_flt[,order(pData(pep_res_flt)$label_swap, pData(pep_res_flt)$Replicate)]) + ylab('CL/NC (log2')
+plot_quant(prot_res[,order(pData(prot_res)$Replicate)]) + ylab('CL/NC (log2')
 ```
 
 
 ```{r}
 MSnbase::plotNA(prot_res, pNA = 0)
+mean(is.na(exprs(prot_res)))
 ```
 
 ```{r}
