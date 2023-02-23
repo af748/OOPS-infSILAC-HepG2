@@ -1,0 +1,266 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+#Statistical testing 23-01-2023
+#This Notebook will carry out Differential abundance testing and statistical testing of infSILAC proteomics from my HepG2 OOPS RBPome samples.
+#See previous notebook on Data processing and QC for experimental setup.
+
+
+```{r, message=FALSE}
+library(camprotR)
+library(ggplot2)
+library(MSnbase)
+library(DEqMS)
+library(limma)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(broom)
+library(biobroom)
+
+
+```
+
+```{r}
+
+
+prot_res <- readRDS("/Users/user123/Documents/GitHub/OOPS-infSILAC-HepG2/notebooks/prot_res.rds")
+
+# Find the columns (samples) where the label swap is CL = H
+label_swap_h <- pData(prot_res)$label_swap == 'CL=H'
+
+if(!any(label_swap_h)){
+  error('error message here')
+}
+
+# The others must be CL=L
+label_swap_l <- !label_swap_h
+
+# Find the rows where the CL=H samples have at least two finite (non-NA) values
+keep_h <- rowSums(is.finite(exprs(prot_res[,label_swap_h]))) >= 2
+
+# Find the rows where the CL=L samples have at least two finite (non-NA) values
+keep_l <- rowSums(is.finite(exprs(prot_res[,label_swap_l]))) >= 2
+
+# Filter the proteins to the rows where both the CL=H and CL=L side of the label
+# swap have at least two finite values
+prot_res_flt <- prot_res[(keep_l & keep_h),]
+
+table(rowSums(is.na(prot_res_flt))) 
+
+#814/1211 proteins retained after filtering
+```
+
+```{r}
+silac_protein_tidy <- prot_res_flt %>%
+  biobroom::tidy.MSnSet() %>%
+  filter(is.finite(value))
+
+```
+
+```{r}
+
+example_protein <- 'O00151'
+
+silac_protein_tidy_example <- silac_protein_tidy %>%
+  filter(protein==example_protein)
+
+print(silac_protein_tidy_example)
+
+#O00151	1	  -2.44304344		
+#O00151	11	-1.15763179		
+#O00151	13	-0.38174502		
+#O00151	16	-1.93439245		
+```
+
+```{r}
+t.test.res <- t.test(silac_protein_tidy_example$value,
+                     alternative='two.sided')
+
+print(t.test.res)
+#> 
+#>  One Sample t-test
+
+#data:  silac_protein_tidy_example$value
+#t = -4.5386, df = 11, p-value = 0.0008457
+#alternative hypothesis: true mean is not equal to 0
+#95 percent confidence interval:
+# -1.3943719 -0.4836417
+#sample estimates:
+# mean of x 
+#-0.9390068 
+
+```
+
+```{r}
+tidy(t.test.res)
+
+```
+
+```{r}
+t.test.res.all <- silac_protein_tidy %>% group_by(protein) %>%
+  do(tidy(t.test(.$value, alternative='two.sided')))
+
+```
+
+```{r}
+print(t.test.res)
+#> 
+#> 
+#> 	One Sample t-test
+
+#> data:  silac_protein_tidy_example$value
+#> t = -4.5386, df = 11, p-value = 0.0008457
+#> alternative hypothesis: true mean is not equal to 0
+#> 95 percent confidence interval:
+ #> -1.3943719 -0.4836417
+#> sample estimates:
+#>  mean of x 
+#> -0.9390068 
+#> 
+t.test.res.all %>% filter(protein==example_protein)
+
+```
+
+```{r}
+hist(t.test.res.all$p.value, 20)
+```
+
+```{r}
+t.test.res.all$padj <- p.adjust(t.test.res.all$p.value, method='BH')
+table(t.test.res.all$padj<0.01)
+#> 
+#>  FALSE    TRUE 
+#>   341      473  
+#>   473 proteins with significant difference
+```
+
+```{r}
+t.test.res.all %>%
+  ggplot(aes(x = estimate, y = -log10(p.value), colour = padj < 0.01)) +
+  geom_point() +
+  theme_camprot(border=FALSE, base_size=15) +
+  scale_colour_manual(values = c('grey', get_cat_palette(2)[2]), name = 'CL vs NC Sig.') +
+  labs(x = 'CL vs NC (Log2)', y = '-log10(p-value)')
+```
+
+```{r}
+dat <- prot_res_flt %>%
+  exprs()
+
+# Performing the equivalent of a one-sample t-test, so the design matrix is just an intercept
+design <- cbind(Intercept = rep(1, ncol(dat)))
+
+fit <- lmFit(dat, design)
+efit <- eBayes(fit)
+```
+
+```{r}
+
+#protein_ratio_long <- prot_res_flt %>%
+#  exprs() %>%
+#  data.frame() %>%
+#  tibble::rownames_to_column('Master.Protein.Accessions') %>%
+#  pivot_longer(cols=-Master.Protein.Accessions, values_to = 'protein_ratio', names_to = 'sample')
+
+
+protein_ratio <- prot_res_flt %>%
+  exprs()
+
+protein_ratio_df <- data.frame(protein_ratio)
+
+protein_ratio_long<-protein_ratio_df %>%
+  tibble::rownames_to_column('Master.Protein.Accessions') %>%
+  pivot_longer(cols=-Master.Protein.Accessions, values_to='protein_ratio', names_to='sample')
+
+pep_res <- readRDS('pep_res.rds')
+
+# Obtain the min peptide count across the samples and determine the minimum value across
+# samples
+min_pep_count <- camprotR::count_features_per_protein(pep_res) %>%
+  merge(protein_ratio_long,  by=c('Master.Protein.Accessions','sample')) %>%
+  filter(is.finite(protein_ratio)) %>%  # We only want to consider samples with a ratio quantified
+  group_by(Master.Protein.Accessions) %>%
+  summarise(min_pep_count = min(n))
+
+# add the min peptide count
+efit$count <- min_pep_count$min_pep_count
+```
+
+```{r}
+# run DEqMS
+efit_deqms <- suppressWarnings(spectraCounteBayes(efit))
+
+```
+
+```{r}
+# Diagnostic plots
+VarianceBoxplot(efit_deqms, n = 30, xlab = "Peptides")
+```
+
+```{r}
+deqms_results <- outputResult(efit_deqms, coef_col = 1)
+
+deqms_results %>%
+  ggplot(aes(x = logFC, y = -log10(sca.P.Value), colour = sca.adj.pval < 0.01)) +
+  geom_point() +
+  theme_camprot(border=FALSE, base_size=15) +
+  scale_colour_manual(values = c('grey', get_cat_palette(2)[2]), name = 'CL vs NC Sig.') +
+  labs(x = 'CL vs NC (Log2)', y = '-log10(p-value)')
+```
+```{r}
+head(deqms_results)
+```
+
+```{r}
+colnames(t.test.res.all) <- paste0('t.test.', colnames(t.test.res.all))
+colnames(deqms_results) <- paste0('deqms.', colnames(deqms_results))
+```
+
+
+```{r}
+silac_compare_tests <- merge(deqms_results,
+      t.test.res.all,
+      by.x='row.names',
+      by.y='t.test.protein')
+```
+
+```{r}
+p <- ggplot(silac_compare_tests) +
+  aes(log10(t.test.p.value), log10(deqms.P.Value)) +
+  geom_point() +
+  geom_abline(slope=1, linetype=2, colour=get_cat_palette(1), size=1) +
+  theme_camprot(border=FALSE) +
+  labs(x='T-test log10(p-value)', y='DEqMS log10(p-value)')
+
+print(p)
+```
+
+```{r}
+silac_compare_tests %>%
+  group_by(t.test.padj<0.01,
+           deqms.sca.adj.pval<0.01) %>%
+  tally()
+
+
+```
+
+```{r}
+ # Saving to R binary format. Can read back into memory with readRDS().
+saveRDS(silac_compare_tests, 'SILAC_tests.rds')
+
+# Saving to tab-separated (human-readable) flatfile
+write.csv(silac_compare_tests, 'SILAC_tests', sep='\t', row.names=FALSE)
+
+```
+
+
+
+
+
