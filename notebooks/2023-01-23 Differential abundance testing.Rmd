@@ -57,10 +57,33 @@ table(rowSums(is.na(prot_res_flt)))
 #814/1211 proteins retained after filtering
 ```
 
+
+
 ```{r}
 silac_protein_tidy <- prot_res_flt %>%
   biobroom::tidy.MSnSet() %>%
   filter(is.finite(value))
+```
+
+```{r}
+#need to 2^ value in order to un-log the value
+#need to -0.5 the ratio.
+#in this chunk i attempt to change the value column from log values back to the ratio, and i attempt to -0.5 from the value.
+  
+  
+#Here i attempt to raise the ratio to the power of 10 (opposite of log)
+#should be opposite of log2 which is 2^value
+silac_unlog <- silac_protein_tidy %>%
+  mutate(silac_protein_tidy, value= 2^value)
+
+#Here i attempt to subtract 0.5
+silac_0.5 <- 
+   mutate(silac_unlog, value=value-0.5)
+#this just made things a bit easier 
+silac_protein_tidy <- silac_0.5
+
+
+
 
 ```
 
@@ -85,16 +108,14 @@ t.test.res <- t.test(silac_protein_tidy_example$value,
 
 print(t.test.res)
 #> 
-#>  One Sample t-test
-
 #data:  silac_protein_tidy_example$value
-#t = -4.5386, df = 11, p-value = 0.0008457
+#t = 1.088, df = 11, p-value = 0.2999
 #alternative hypothesis: true mean is not equal to 0
 #95 percent confidence interval:
-# -1.3943719 -0.4836417
+# -0.07797883  0.23043178
 #sample estimates:
 # mean of x 
-#-0.9390068 
+#0.07622647 
 
 ```
 
@@ -115,14 +136,14 @@ print(t.test.res)
 #> 
 #> 	One Sample t-test
 
-#> data:  silac_protein_tidy_example$value
-#> t = -4.5386, df = 11, p-value = 0.0008457
-#> alternative hypothesis: true mean is not equal to 0
-#> 95 percent confidence interval:
- #> -1.3943719 -0.4836417
-#> sample estimates:
-#>  mean of x 
-#> -0.9390068 
+#data:  silac_protein_tidy_example$value
+#t = 1.088, df = 11, p-value = 0.2999
+#alternative hypothesis: true mean is not equal to 0
+#95 percent confidence interval:
+# -0.07797883  0.23043178
+#sample estimates:
+# mean of x 
+#0.07622647 
 #> 
 t.test.res.all %>% filter(protein==example_protein)
 
@@ -134,7 +155,7 @@ hist(t.test.res.all$p.value, 20)
 
 ```{r}
 t.test.res.all$padj <- p.adjust(t.test.res.all$p.value, method='BH')
-table(t.test.res.all$padj<0.01)
+table(t.test.res.all$padj<0.05)
 #> 
 #>  FALSE    TRUE 
 #>   341      473  
@@ -142,8 +163,20 @@ table(t.test.res.all$padj<0.01)
 ```
 
 ```{r}
+prot_count<- rowSums(is.finite(exprs(prot_res_flt)))
+prot_count_df <- data_frame(prot_count)
+
+everything <-cbind(t.test.res.all, prot_count_df)
+
+ggplot(everything, aes(p.value)) + geom_histogram() + facet_wrap(~prot_count,scales="free_y") 
+```
+
+
+
+
+```{r}
 t.test.res.all %>%
-  ggplot(aes(x = estimate, y = -log10(p.value), colour = padj < 0.01)) +
+  ggplot(aes(x = estimate, y = -log10(p.value), colour = padj < 0.05)) +
   geom_point() +
   theme_camprot(border=FALSE, base_size=15) +
   scale_colour_manual(values = c('grey', get_cat_palette(2)[2]), name = 'CL vs NC Sig.') +
