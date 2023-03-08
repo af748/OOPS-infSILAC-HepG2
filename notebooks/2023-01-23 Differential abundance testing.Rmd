@@ -1,16 +1,11 @@
 ---
-title: "R Notebook"
+title: "Statistical testing"
 output: html_notebook
 ---
 
-This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
 
-Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
 
-#Statistical testing 23-01-2023
-#This Notebook will carry out Differential abundance testing and statistical testing of infSILAC proteomics from my HepG2 OOPS RBPome samples.
-#See previous notebook on Data processing and QC for experimental setup.
-
+#Statistical testing 23-01-2023 #This Notebook will carry out Differential abundance testing and statistical testing of infSILAC proteomics from my HepG2 OOPS RBPome samples. #See previous notebook on Data processing and QC for experimental setup.
 
 ```{r, message=FALSE}
 library(camprotR)
@@ -23,14 +18,14 @@ library(tidyr)
 library(ggplot2)
 library(broom)
 library(biobroom)
-
-
+library(here)
+library(ggbeeswarm)
 ```
 
 ```{r}
 
 
-prot_res <- readRDS("/Users/user123/Documents/GitHub/OOPS-infSILAC-HepG2/notebooks/prot_res.rds")
+prot_res <- readRDS(here('results/prot_res.rds'))
 
 # Find the columns (samples) where the label swap is CL = H
 label_swap_h <- pData(prot_res)$label_swap == 'CL=H'
@@ -48,6 +43,7 @@ keep_h <- rowSums(is.finite(exprs(prot_res[,label_swap_h]))) >= 2
 # Find the rows where the CL=L samples have at least two finite (non-NA) values
 keep_l <- rowSums(is.finite(exprs(prot_res[,label_swap_l]))) >= 2
 
+table(keep_l & keep_h)
 # Filter the proteins to the rows where both the CL=H and CL=L side of the label
 # swap have at least two finite values
 prot_res_flt <- prot_res[(keep_l & keep_h),]
@@ -57,34 +53,78 @@ table(rowSums(is.na(prot_res_flt)))
 #814/1211 proteins retained after filtering
 ```
 
+The maximum (unadjusted) ratio should be `r log2(1/1)`. Any ratio above this is because of measurement error (in the MS), incomplete heavy isotope incorporation, or inaccurate plate mixing (different numbers of cells). 
+
+```{r}
+plot_quant(prot_res_flt[,order(pData(prot_res_flt)$Replicate)]) +
+  geom_hline(yintercept=log2(1/1), linetype=2)
+```
+There is a lot of variation in the distribution of ratios between the experiment, with the even replicates (CL=L) having consistently higher ratios (aside from replicate 16). Even within one half of the label swap, there is a lot of variation. We can separate the sample by their annotations to explore this futher (see below). The green line is the expected maximum value for a true RBP and the black line is the expected minimum value for a non RBP. However, values can fall outside these bounds due to measurement error, incomplete incorporation and/or unbalanced cell numbers for each isotope.
 
 
 ```{r}
-silac_protein_tidy <- prot_res_flt %>%
-  biobroom::tidy.MSnSet() %>%
-  filter(is.finite(value))
+
+prot_res_flt_long <- tidy(prot_res_flt, addPheno =TRUE) %>%
+  merge(fData(prot_res_flt),by.x='protein', by.y='row.names')
+
+p <- prot_res_flt_long %>%
+  filter(go_rbp_glyco!='GO:RBP & glycoprotein') %>%
+  ggplot(
+            aes(factor(Replicate, levels=1:16), value, colour=go_rbp_glyco, group=interaction(go_rbp_glyco, Replicate))) +
+  geom_boxplot(outlier.shape = NA) +
+  scale_colour_manual(values=c('grey', 'grey20', get_cat_palette(3)[c(3,2)])) +
+  facet_wrap(~label_swap, scales='free') +
+  theme_camprot(base_size=10, base_family='sans', aspect_square=FALSE, border=FALSE) +
+  geom_hline(yintercept=log2(1/1), linetype=2, colour=get_cat_palette(3)[3]) +
+  geom_hline(yintercept=log2(1/2), linetype=2, colour='grey20') +
+  theme(strip.background=element_blank()) +
+  ylab('CL/NC ratio') +
+  xlab('Replicate') +
+  coord_flip(ylim=c(-2.5, 2.5))
+  
+
+print(p)
+```
+Now that we have included the annotation, we can see that althought there is a large variation in the ratio distributions between the experiments, in almost all experiments, the GO:RBPs have higher ratios.
+
+Since glycoproteins should not have higher abundance upon CL and should have their CL/NC ratio centered at 0, we can use this prior expectation to adjust the ratio. Following this adjustment, our null hypothesis in the downstream statistical testing is that the protein has the same CL/NC enrichment as a typical glycoprotein, which should not be enriched by CL.
+
+See https://mrctoxbioinformatics.github.io/Proteomics_data_analysis/Markdowns/LFQ_alternative_normalisation.html for code to do this ratio adjustment. Once the ratios have been adjusted, we can proceed with the statistical testing as previously.
+
+```{r}
+# insert code for adjustment here...
+#prot_res_flt_adj <- ...
+```
+
+Below, we check that the normalisation has worked as desired. 
+```{r}
+
+prot_res_flt_adj_long <- tidy(prot_res_flt_adj, addPheno =TRUE) %>%
+  merge(fData(prot_res_flt),by.x='protein', by.y='row.names')
+
+p <- prot_res_flt_adj_long %>%
+  filter(go_rbp_glyco!='GO:RBP & glycoprotein') %>%
+  ggplot(
+            aes(factor(Replicate, levels=1:16), value, colour=go_rbp_glyco, group=interaction(go_rbp_glyco, Replicate))) +
+  geom_boxplot(outlier.shape = NA) +
+  scale_colour_manual(values=c('grey', 'grey20', get_cat_palette(3)[c(3,2)])) +
+  facet_wrap(~label_swap, scales='free') +
+  theme_camprot(base_size=10, base_family='sans', aspect_square=FALSE, border=FALSE) +
+  geom_hline(yintercept=log2(1/1), linetype=2, colour=get_cat_palette(3)[3]) +
+  geom_hline(yintercept=log2(1/2), linetype=2, colour='grey20') +
+  theme(strip.background=element_blank()) +
+  ylab('CL/NC ratio') +
+  xlab('Replicate') +
+  coord_flip(ylim=c(-2.5, 2.5))
+  
+
+print(p)
 ```
 
 ```{r}
-#need to 2^ value in order to un-log the value
-#need to -0.5 the ratio.
-#in this chunk i attempt to change the value column from log values back to the ratio, and i attempt to -0.5 from the value.
-  
-  
-#Here i attempt to raise the ratio to the power of 10 (opposite of log)
-#should be opposite of log2 which is 2^value
-silac_unlog <- silac_protein_tidy %>%
-  mutate(silac_protein_tidy, value= 2^value)
-
-#Here i attempt to subtract 0.5
-silac_0.5 <- 
-   mutate(silac_unlog, value=value-0.5)
-#this just made things a bit easier 
-silac_protein_tidy <- silac_0.5
-
-
-
-
+silac_protein_tidy <- prot_res_flt_adj %>%
+  biobroom::tidy.MSnSet() %>%
+  filter(is.finite(value))
 ```
 
 ```{r}
@@ -156,23 +196,17 @@ hist(t.test.res.all$p.value, 20)
 ```{r}
 t.test.res.all$padj <- p.adjust(t.test.res.all$p.value, method='BH')
 table(t.test.res.all$padj<0.05)
-#> 
-#>  FALSE    TRUE 
-#>   341      473  
-#>   473 proteins with significant difference
+
 ```
 
 ```{r}
-prot_count<- rowSums(is.finite(exprs(prot_res_flt)))
+prot_count<- rowSums(is.finite(exprs(prot_res_flt_adj)))
 prot_count_df <- data_frame(prot_count)
 
 everything <-cbind(t.test.res.all, prot_count_df)
 
 ggplot(everything, aes(p.value)) + geom_histogram() + facet_wrap(~prot_count,scales="free_y") 
 ```
-
-
-
 
 ```{r}
 t.test.res.all %>%
@@ -184,35 +218,43 @@ t.test.res.all %>%
 ```
 
 ```{r}
-dat <- prot_res_flt %>%
+dat <- prot_res_flt_adj %>%
   exprs()
 
 # Performing the equivalent of a one-sample t-test, so the design matrix is just an intercept
 design <- cbind(Intercept = rep(1, ncol(dat)))
 
 fit <- lmFit(dat, design)
-efit <- eBayes(fit)
+efit <- eBayes(fit, trend =TRUE)
+```
+
+Not a great relationship between the average expression (here the modified log2 ratio) and the variance. Makes sense that these two shouldn't be related. Better to switch to DEqMS, which looks for an association between the number of peptides and the variance.
+
+```{r}
+
+limma::plotSA(efit)
 ```
 
 ```{r}
 
-#protein_ratio_long <- prot_res_flt %>%
+#protein_ratio_long <- prot_res_flt_adj %>%
 #  exprs() %>%
 #  data.frame() %>%
 #  tibble::rownames_to_column('Master.Protein.Accessions') %>%
 #  pivot_longer(cols=-Master.Protein.Accessions, values_to = 'protein_ratio', names_to = 'sample')
 
 
-protein_ratio <- prot_res_flt %>%
+protein_ratio <- prot_res_flt_adj %>%
   exprs()
 
 protein_ratio_df <- data.frame(protein_ratio)
 
 protein_ratio_long<-protein_ratio_df %>%
   tibble::rownames_to_column('Master.Protein.Accessions') %>%
-  pivot_longer(cols=-Master.Protein.Accessions, values_to='protein_ratio', names_to='sample')
+  pivot_longer(cols=-Master.Protein.Accessions, values_to='protein_ratio', names_to='sample') %>%
+  mutate(sample=remove_x(sample))
 
-pep_res <- readRDS('pep_res.rds')
+pep_res <- readRDS(here('results/pep_res_flt.rds'))
 
 # Obtain the min peptide count across the samples and determine the minimum value across
 # samples
@@ -232,9 +274,14 @@ efit_deqms <- suppressWarnings(spectraCounteBayes(efit))
 
 ```
 
+A better relationship, even if it is still weak. Only real difference is higher variance for very low minimum peptides.
+
 ```{r}
 # Diagnostic plots
-VarianceBoxplot(efit_deqms, n = 30, xlab = "Peptides")
+VarianceBoxplot(efit_deqms,xlab = "Peptides")
+VarianceScatterplot(efit_deqms, xlab = "log2(Peptides)", )
+
+log2(18)
 ```
 
 ```{r}
@@ -247,6 +294,7 @@ deqms_results %>%
   scale_colour_manual(values = c('grey', get_cat_palette(2)[2]), name = 'CL vs NC Sig.') +
   labs(x = 'CL vs NC (Log2)', y = '-log10(p-value)')
 ```
+
 ```{r}
 head(deqms_results)
 ```
@@ -255,7 +303,6 @@ head(deqms_results)
 colnames(t.test.res.all) <- paste0('t.test.', colnames(t.test.res.all))
 colnames(deqms_results) <- paste0('deqms.', colnames(deqms_results))
 ```
-
 
 ```{r}
 silac_compare_tests <- merge(deqms_results,
@@ -273,12 +320,18 @@ p <- ggplot(silac_compare_tests) +
   labs(x='T-test log10(p-value)', y='DEqMS log10(p-value)')
 
 print(p)
+
+
 ```
+
+As expected, p-values from the t-test and modified t-test (that's basically what DEqMS is in this parameterisation) are well correlated, but generally slightly lower for DEqMS.
+
+Comparing the number of 'significant' hits, we see that we obtain a few more with DEqMS
 
 ```{r}
 silac_compare_tests %>%
-  group_by(t.test.padj<0.01,
-           deqms.sca.adj.pval<0.01) %>%
+  group_by(t.test.padj<0.05,
+           deqms.sca.adj.pval<0.05) %>%
   tally()
 
 
@@ -286,14 +339,10 @@ silac_compare_tests %>%
 
 ```{r}
  # Saving to R binary format. Can read back into memory with readRDS().
-saveRDS(silac_compare_tests, 'SILAC_tests.rds')
+saveRDS(silac_compare_tests, here('results/SILAC_tests.rds'))
 
 # Saving to tab-separated (human-readable) flatfile
-write.csv(silac_compare_tests, 'SILAC_tests', sep='\t', row.names=FALSE)
+write.table(silac_compare_tests, here('SILAC_tests.tsv'), sep='\t', row.names=FALSE)
 
 ```
-
-
-
-
 

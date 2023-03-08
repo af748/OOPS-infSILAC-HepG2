@@ -407,7 +407,7 @@ pData(pep_res)$label_swap <- ifelse(pData(pep_res)$Replicate %in% seq(1,16,2), '
 
 ```{r}
 pep_res_flt <- pep_res %>%
-  camprotR::restrict_features_per_protein(min_features=2, plot=FALSE)
+  camprotR::restrict_features_per_protein(min_features=1, plot=TRUE)
 
 prot_res <- combineFeatures(
   pep_res_flt,
@@ -430,6 +430,40 @@ plot_quant(pep_res_flt[,order(pData(pep_res_flt)$label_swap, pData(pep_res_flt)$
 plot_quant(prot_res[,order(pData(prot_res)$Replicate)]) + ylab('CL/NC (log2')
 ```
 
+We want to annotate the proteins to describe whether they are RBPs (according to GO) and/or glycoproteins (according to Uniprot)
+```{r}
+glyco_res <- readRDS(here('references/glyco_res.rds'))
+go_all <- readRDS(here('references/go_all.rds'))
+glycoproteins <- glyco_res %>% filter(Glycosylation!='') %>% pull(UNIPROTKB)
+rbps <- go_all %>% filter(TERM=='RNA binding') %>% pull(UNIPROTKB)
+```
+
+```{r}
+
+
+fData(prot_res)$glyco <- sapply(rownames(prot_res), function(x){
+  any(strsplit(x, '; ')[[1]] %in% glycoproteins)
+})
+
+table(fData(prot_res)$glyco)
+
+fData(prot_res)$go_rbp <- sapply(rownames(prot_res), function(x){
+  any(strsplit(x, '; ')[[1]] %in% rbps)
+})
+
+table(fData(prot_res)$go_rbp)
+
+
+fData(prot_res)$go_rbp_glyco <- recode(
+  interaction(fData(prot_res)$glyco, fData(prot_res)$go_rbp),
+  'FALSE.FALSE'='Other',
+  'FALSE.TRUE'='GO:RBP',
+  'TRUE.FALSE'='Glycoprotein',
+  'TRUE.TRUE'='GO:RBP & glycoprotein')
+
+table(fData(prot_res)$go_rbp_glyco)
+
+```
 
 ```{r}
 MSnbase::plotNA(prot_res, pNA = 0)
@@ -437,6 +471,7 @@ mean(is.na(exprs(prot_res)))
 ```
 
 ```{r}
-saveRDS(prot_res, 'prot_res.rds')
-saveRDS(pep_res, 'pep_res.rds')
+saveRDS(prot_res, here('results/prot_res.rds'))
+saveRDS(pep_res, here('results/pep_res.rds'))
+saveRDS(pep_res_flt, here('results/pep_res_flt.rds'))
 ```
