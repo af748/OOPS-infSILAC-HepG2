@@ -1,0 +1,117 @@
+---
+title: "Get annotations"
+output: html_notebook
+---
+
+Here, we obtain annotations for the proteins. Specifically, we obtain all GO annotations and glycosylation annotations from Uniprot.
+```{r}
+library(here)
+library(dplyr)
+
+#library(UniProt.ws)
+library(uniprotREST)
+```
+
+We only want to obtain annotations for the proteins in our data. We'll parse all the peptideGroups files and identify all protein IDs, irrespective of whether they will eventially pass filters, e.g not cRAP.
+```{r}
+
+replicates <- 1:16
+#here() is used above to make the filepath start from the correct location (the top of the project directory)
+#Sys.glob returns all the files matching the above pattern, which should be all peptide groups files
+pep_infiles <- Sys.glob(here('extdata/*_PeptideGroups.txt'))
+
+#this gives us a list of all the files (16 replicates)
+
+names(pep_infiles) <- replicates
+
+
+```
+
+
+```{r}
+
+
+all_proteins <- pep_infiles[1:2] %>% lapply(function(x){
+  read.delim(x) %>%
+    pull(Master.Protein.Accessions) %>%
+    unique()
+}) %>% unlist(use.names=FALSE) %>%
+  unique() %>%
+  setdiff(c('sp')) %>% # some proteins, only from cRAP I think, get 'sp' as their protein ID
+  strsplit('; ') %>% # Where the master protein ID is not unique, we want to obtain annotations for all members
+  unlist()
+
+```
+
+Retrieve the GO annotations for all these proteins. `Uniprot.ws` is the standard Bioconductor package, but older versions of this package were broken by the update to the Uniprot API, so you may not be able to use this package unless you have recent version of R and Bioconductor. To avoid any issues, I'm using functions from the `uniprotREST` package (https://github.com/csdaw/uniprotREST) developed by Charlotte Dawson, Cambridge Center for Proteomics.
+```{r}
+res <-  uniprot_map(
+  ids = all_proteins,
+  from = "UniProtKB_AC-ID",
+  to = "UniProtKB",
+  fields = c("go")
+)
+
+go_long <- res %>% filter(Gene.Ontology..GO.!='') %>%
+  separate_rows('Gene.Ontology..GO.', sep='; ') %>%
+  separate(Gene.Ontology..GO., into=c('GO', 'GO_ID'), sep=' \\[GO:') %>%
+  mutate(GO_ID=paste0('GO:', gsub(']', '', `GO_ID`))) %>%
+  rename(c('UNIPROTKB'='From'))
+```
+GO terms are heirachical, so that a protein annotated with one GO term is also implicitly annotated with all the parent GO terms. For example, 'tRNA-binding' proteins are also 'RNA binding'. 
+
+However, the Uniprot database does not include all the parent GO terms. Below we see that many tRNA-binding proteins are not annotated as RNA binding in Uniprot.
+
+```{r}
+go_rbp <- "GO:0003723" 
+go_trna_bp <- "GO:0000049"
+
+rbps <- go_long %>% 
+  filter(GO_ID == go_rbp) %>% 
+  pull(UNIPROTKB)
+
+trna_bps <- go_long %>% 
+  filter(GO_ID == go_trna_bp) %>% 
+  pull(UNIPROTKB)
+
+sapply(trna_bps, FUN = function(x) x %in% rbps)
+table(sapply(trna_bps, FUN = function(x) x %in% rbps))
+```
+For the functional enrichment analysis, we need the annotations to be expanded so that it includes all the parent terms too. We can use `camprotR::get_ancestor_go` for this.
+```{r}
+go_all <- camprotR::get_ancestor_go(
+  go_long,
+  feature_col = "UNIPROTKB",
+  go_col = "GO_ID",
+  verbose = TRUE
+)
+
+```
+Now our tRNA-binding proteins are all also annotated as RNA-binding proteins.
+```{r}
+rbps <- go_all %>% 
+  filter(GO_ID == go_rbp) %>% 
+  pull(UNIPROTKB)
+
+trna_bps <- go_all %>% 
+  filter(GO_ID == go_trna_bp) %>% 
+  pull(UNIPROTKB)
+
+sapply(trna_bps, FUN = function(x) x %in% rbps)
+table(sapply(trna_bps, FUN = function(x) x %in% rbps))
+```
+
+```{r}
+glyco_res <-  uniprot_map(
+  ids = all_proteins,
+  from = "UniProtKB_AC-ID",
+  to = "UniProtKB",
+  fields = "ft_carbohyd",
+) %>% rename(c('UNIPROTKB'='From'))
+```
+
+```{r}
+saveRDS(glyco_res, here('references/glyco_res.rds'))
+saveRDS(go_all, here('references/go_all.rds'))
+```
+
