@@ -19,7 +19,6 @@ library(ggplot2)
 library(broom)
 library(biobroom)
 library(here)
-library(ggbeeswarm)
 ```
 
 ```{r}
