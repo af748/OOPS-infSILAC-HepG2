@@ -1,0 +1,81 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r, message=FALSE}
+
+library(Proteomics.analysis.data)
+library(camprotR)
+library(here)
+library(preprocessCore)
+library(camprotR)
+library(Biostrings)
+library(ggplot2)
+library(MSnbase)
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(here)
+
+here()
+```
+
+
+```{r}
+# The cRAP fasta file for this experiment is part of the Proteomics.analysis.data package.
+# For a real experiment, make sure to the use the same cRAP fasta that was used in PD
+
+psm_infiles <- Sys.glob(here('extdata/*_PSMs.txt'))
+
+pep_infiles <- (Sys.glob(here('extdata/*_PeptideGroups.txt')))
+
+crap_fasta <- here('extdata/crap.fasta')
+
+read.delim('*_PSMs.txt')
+
+examplepep <- Sys.glob(here('extdata/*_PeptideGroups.txt'))
+
+examplepsm <- Sys.glob(here('extdata/*_PSMs.txt'))
+
+pepppp <- read.delim(examplepep)
+
+read
+
+# psm_silac_p4 and pep_silac_p4 are loaded from the `camprotR` package 
+incorporation_results <- camprotR::estimate_incorporation(
+ 
+  psm_input = read.delim(Sys.glob(here(PSMs.txt))),
+ 
+  peptide_input = read.delim(Sys.glob((here(PeptideGroups.txt))), 
+  crap_fasta = crap_fasta,
+  mix = 1.5
+)
+```
+
+```{r}
+print(incorporation_results$HL_correlation)
+```
+
+
+
+``` {r}
+print(incorporation_results$peptide_incorporation)
+```
+
+``` {r}
+print(incorporation_results$protein_incorporation)
+```
+
+
+
+
+incorporation_results <- camprotR::estimate_incorporation(
+ 
+  psm_input = read.delim(examplepsm),
+ 
+  peptide_input = read.delim(examplepep), 
+  crap_fasta = crap_fasta,
+  mix = 1 
+)
