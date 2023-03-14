@@ -19,6 +19,9 @@ library(ggplot2)
 library(broom)
 library(biobroom)
 library(here)
+library(uniprotREST)
+library(Proteomics.analysis.data)
+
 ```
 
 ```{r}
@@ -49,7 +52,7 @@ prot_res_flt <- prot_res[(keep_l & keep_h),]
 
 table(rowSums(is.na(prot_res_flt))) 
 
-#814/1211 proteins retained after filtering
+#1380/2100 proteins retained after filtering
 ```
 
 The maximum (unadjusted) ratio should be `r log2(1/1)`. Any ratio above this is because of measurement error (in the MS), incomplete heavy isotope incorporation, or inaccurate plate mixing (different numbers of cells). 
@@ -84,7 +87,8 @@ p <- prot_res_flt_long %>%
 
 print(p)
 ```
-Now that we have included the annotation, we can see that althought there is a large variation in the ratio distributions between the experiments, in almost all experiments, the GO:RBPs have higher ratios.
+
+Now that we have included the annotation, we can see that although there is a large variation in the ratio distributions between the experiments, in almost all experiments, the GO:RBPs have higher ratios.
 
 Since glycoproteins should not have higher abundance upon CL and should have their CL/NC ratio centered at 0, we can use this prior expectation to adjust the ratio. Following this adjustment, our null hypothesis in the downstream statistical testing is that the protein has the same CL/NC enrichment as a typical glycoprotein, which should not be enriched by CL.
 
@@ -92,7 +96,61 @@ See https://mrctoxbioinformatics.github.io/Proteomics_data_analysis/Markdowns/LF
 
 ```{r}
 # insert code for adjustment here...
-#prot_res_flt_adj <- ...
+fData(prot_res_flt) <- fData(prot_res_flt) %>%
+  mutate(Glycoprotein = rownames(prot_res_flt) %in% glycoproteins) %>%
+  mutate(GO.RBP = rownames(prot_res_flt) %in% rbps) %>%
+  mutate(Glyco.RBP = interaction(Glycoprotein, GO.RBP)) %>%
+  mutate(Glyco.RBP = factor(recode(
+    Glyco.RBP,
+    'TRUE.TRUE'='GO:RBGP',
+    'FALSE.TRUE'='GO:RBP',
+    'TRUE.FALSE'='Glycoprotein',
+    'FALSE.FALSE'='Other'),
+    levels = c('GO:RBP', 'GO:RBGP', 'Other', 'Glycoprotein'))
+  )
+
+plot_ratios <- function(obj) {
+  to_plot <- merge(
+    exprs(obj),
+    fData(obj)[,'Glyco.RBP',drop = FALSE],
+    by = 'row.names'
+  ) %>%
+    pivot_longer(cols = -c(Row.names, Glyco.RBP), names_to = 'sample', values_to = 'ratio') %>%
+    merge(pData(obj), by.x = 'sample', by.y = 'row.names') %>%
+    filter(is.finite(ratio))
+  
+  p <- to_plot %>% 
+    ggplot(aes(x = Replicate, y = ratio, 
+               group = interaction(Glyco.RBP, Replicate), 
+               colour = factor(Glyco.RBP))) +
+    geom_boxplot(position = position_dodge()) +
+    theme_camprot(border = FALSE, base_family = 'sans', base_size = 15) +
+    scale_colour_manual(values = c(get_cat_palette(3), 'black'), name = '') +
+    geom_hline(yintercept = 0, linetype = 2, colour = 'grey') +
+    labs(
+      x = "Replicate",
+      y = "RNase -/+ ratio"
+    )
+  
+  print(p)
+  
+  invisible(to_plot)
+}
+
+plot_ratios(prot_res_flt)
+
+glycoprotein_medians <- prot_res_flt[fData(prot_res_flt)$Glyco.RBP == 'Glycoprotein',] %>% 
+  camprotR::get_medians()
+
+prot_res_flt_adj <- camprotR::center_normalise_to_ref(
+  prot_res_flt,
+  glycoprotein_medians,
+  center_to_zero = TRUE, # We want to center the glycoproteins around zero
+  on_log_scale = TRUE # The quantifications are on a log scale (log2 ratios)
+)
+
+plot_ratios(prot_ratios_norm)
+
 ```
 
 Below, we check that the normalisation has worked as desired. 
@@ -344,4 +402,3 @@ saveRDS(silac_compare_tests, here('results/SILAC_tests.rds'))
 write.table(silac_compare_tests, here('SILAC_tests.tsv'), sep='\t', row.names=FALSE)
 
 ```
-
