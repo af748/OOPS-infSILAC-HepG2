@@ -1,0 +1,97 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+This notebook will be used to carry out GO:analysis of my RBPome generated from infSILAC data. Find previous notebook under 2023-01-23 Differential abundance....
+
+```{r}
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("clusterProfiler")
+
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("org.Hs.eg.db")
+
+install.packages("RColorBrewer")
+install.packages("ggvenn")
+install.packages("VennDiagram")
+```
+
+```{r}
+
+library(RColorBrewer)
+library(limma)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(ggplot2)
+library(VennDiagram)
+library(ggvenn)
+
+```
+
+```{r}
+
+#p<- readRDS(here('results/DEqMS_results.rds'))
+     
+
+    
+
+#help(enrichGO)
+
+
+
+#This code takes my deqms results df and extracts just the gene column and the p value
+Gene_Pvaldf = data.frame(deqms_results$sca.adj.pval, p$gene)
+#check there are two columns
+colnames(Gene_Pvaldf)
+#Now i filter all RBPs that are significantly enriched with a pvalue>0.05
+Filtered_RBP_list<- filter(Gene_Pvaldf, deqms_results.sca.adj.pval < 0.05)
+
+
+
+    
+
+
+GO<- enrichGO(gene = Filtered_RBP_list$p.gene, universe=deqms_results$gene, keyType = "UNIPROT", OrgDb = org.Hs.eg.db, ont="ALL")
+
+dotplot(GO)
+
+
+```
+
+
+```{r}
+
+GO2<- enrichGO(gene = deqms_results$gene, universe=prot_res, keyType = "UNIPROT", OrgDb = org.Hs.eg.db, ont="ALL")
+
+dotplot(GO2)
+
+
+write.csv(Filtered_RBP_list,file='/Users/user123/Documents/new_file.csv', row.names=FALSE)
+
+
+```
+
+```{r}
+cell_line_df<- read.csv('/Users/user123/Documents/GitHub/OOPS-infSILAC-HepG2/GO;Figures/RBP_List_cell_lines.csv', row.names = "Uniprot_ID")
+
+a <- vennCounts(cell_line_df)
+
+install.packages("wesanderson")
+
+library(wesanderson)
+
+vennDiagram(a, circle.col=c(wes_palette(n=3, name="GrandBudapest")))
+
+
+
+vennDiagram(a, circle.col = c("darkturquoise", "blue", "steelblue", "tan1"))
+
+
+
+```
+
+
