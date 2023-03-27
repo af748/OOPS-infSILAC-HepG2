@@ -1,0 +1,42 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+
+```{r}
+#Import Unique RBP list of 49 proteins which were only found in HepG2.C3A
+unique_RBP<- read.csv('/Users/user123/Documents/GitHub/OOPS-infSILAC-HepG2/GO;Figures/HepG2_Unique_RBPs_Final_csv_import.csv')
+
+#Carry out GO analysis of these RBPs
+GO3<- enrichGO(gene = unique_RBP$Gene, universe=unique_RBP, keyType = "UNIPROT", OrgDb = org.Hs.eg.db, ont="ALL")
+
+#plot the dotplot
+dotplot(GO3)
+
+
+
+
+
+```
+
+```{r}
+#Import CSV of enriched Proteins which are not RBPs.
+#Import Unique RBP list of 49 proteins which were only found in HepG2.C3A
+unique_Protein<- read.csv('/Users/user123/Documents/GitHub/OOPS-infSILAC-HepG2/GO;Figures/HepG2_Unique_Other_Proteins_Final_csv_import.csv')
+
+#Carry out GO analysis of these RBPs
+GO4<- enrichGO(gene = unique_Protein$Gene, universe=deqms_results, keyType = "UNIPROT", OrgDb = org.Hs.eg.db, ont="ALL")
+
+#plot the dotplot
+dotplot(GO4)
+
+
+```
+
+
+
+
+
+
