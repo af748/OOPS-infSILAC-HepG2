@@ -1,0 +1,64 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(limma)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(ggplot2)
+
+```
+
+
+```{r}
+#Import Unique RBP list of 49 proteins which were only found in HepG2.C3A
+unique_RBP<- read.csv('/Users/user123/Documents/GitHub/OOPS-infSILAC-HepG2/GO;Analysis/HepG2_Unique_RBPs_Final_Uniprot.csv')
+
+#import universe
+Total_RBP<- read.csv('/Users/user123/Documents/GitHub/OOPS-infSILAC-HepG2/GO;Analysis/HepG2.C3A_Total_RBPome_before_enrichment.csv')
+
+
+#Carry out GO analysis of these RBPs
+GO3<- enrichGO(gene = unique_RBP$Gene, universe=Total_RBP , keyType = "UNIPROT", OrgDb = org.Hs.eg.db, ont="ALL")
+
+#plot the dotplot
+dotplot(GO3)
+
+
+
+
+#this Dotplot shows my 49 enriched RBPs which are unique to HepG2.C3A
+```
+
+```{r}
+#Import CSV of enriched Proteins which are not RBPs.
+unique_Protein<- read.csv('/Users/user123/Documents/GitHub/OOPS-infSILAC-HepG2/GO;Analysis/HepG2_Enriched_Non-RBPs_Proteins_Final_csv_import.csv')
+
+#Import CSV of non-RBPs for universe
+non_RBPs<- read.csv('/Users/user123/Documents/GitHub/OOPS-infSILAC-HepG2/GO;Analysis/non-RBP_total_proteome.csv')
+
+#Carry out GO analysis of these RBPs
+GO4<- enrichGO(gene = unique_Protein$Gene, universe=non_RBPs, keyType = "UNIPROT", OrgDb = org.Hs.eg.db, ont="ALL")
+
+#plot the dotplot
+dotplot(GO4)
+
+
+```
+
+```{r}
+#I want to look at my non-enriched RBPs and see their GO-terms.
+unenriched_RBPs<- read.csv('/Users/user123/Documents/GitHub/OOPS-infSILAC-HepG2/GO;Analysis/unenriched_RBP_list.csv')
+
+GO6<- enrichGO(gene = unenriched_RBPs$Gene, universe=deqms_results$protein, keyType = "UNIPROT", OrgDb = org.Hs.eg.db, ont="ALL")
+
+
+dotplot(GO6)
+```
+
+
+
+
+
